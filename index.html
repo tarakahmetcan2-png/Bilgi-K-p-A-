@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bilgi Küpü: Grup Müzakeresi</title>
+    
+    <!-- CSS Framework (Tailwind) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart Library -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Firebase Libraries (Compat Version - Daha Stabil) -->
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .chart-container { position: relative; width: 100%; height: 300px; max-height: 400px; }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03); }
+        .btn-option { transition: all 0.2s ease; }
+        .btn-option:active { transform: scale(0.98); }
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .timer-warning { animation: pulse-red 1s infinite; color: #ef4444; }
+        @keyframes pulse-red { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        
+        /* Scrollbar */
+        .scroller::-webkit-scrollbar { width: 6px; }
+        .scroller::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 4px; }
+        
+        /* Step Styles */
+        .step-active { border-color: #2563eb; background-color: #eff6ff; color: #1e40af; border-width: 2px; }
+        .step-inactive { border-color: #e2e8f0; color: #94a3b8; border-width: 1px; }
+        .step-done { border-color: #22c55e; background-color: #f0fdf4; color: #15803d; border-width: 2px; }
+    </style>
+</head>
+<body class="text-slate-800 bg-slate-50 min-h-screen flex flex-col">
+
+    <!-- Navbar -->
+    <nav id="navbar" class="hidden bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <div class="bg-slate-900 text-white font-bold text-xl px-3 py-1 rounded mr-3">BK</div>
+                    <span class="font-bold text-lg text-slate-700 hidden md:inline">Bilgi Küpü AI</span>
+                    <span id="user-badge" class="ml-4 px-3 py-1 bg-gray-100 rounded-full text-xs font-bold text-slate-600 border border-gray-200">...</span>
+                </div>
+                
+                <!-- Timer Display -->
+                <div id="timer-container" class="hidden flex items-center bg-white px-4 py-1 rounded-lg border border-slate-200 mx-2 shadow-sm">
+                    <span class="mr-2 text-xs font-bold text-gray-400 uppercase tracking-widest">Süre</span>
+                    <span id="global-timer" class="font-mono text-xl font-bold text-slate-800">24:00</span>
+                    <span id="timer-status" class="ml-2 text-[10px] bg-red-100 text-red-600 px-1 rounded font-bold hidden">DURAKLATILDI</span>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="app.navigate('dashboard')" id="nav-dashboard" class="nav-btn px-3 py-2 text-sm font-medium text-gray-500 hover:text-slate-900 transition">Durum</button>
+                    <button onclick="app.navigate('game')" id="nav-game" class="nav-btn px-3 py-2 text-sm font-medium text-gray-500 hover:text-slate-900 transition">Oyun</button>
+                    <button onclick="location.reload()" class="ml-2 text-xs text-red-400 hover:text-red-600 font-medium border border-red-200 px-2 py-1 rounded hover:bg-red-50">Çıkış</button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="flex-grow w-full max-w-7xl mx-auto px-4 py-8">
+
+        <!-- VIEW: LOGIN -->
+        <section id="view-login" class="fade-in max-w-md mx-auto mt-10">
+            <div class="bg-white p-8 rounded-2xl shadow-xl border border-gray-200 text-center">
+                <div class="mb-8">
+                    <div class="inline-block bg-slate-900 text-white font-bold text-3xl px-4 py-2 rounded-lg mb-3 shadow-lg">BK</div>
+                    <h1 class="text-2xl font-bold text-slate-800">Bilgi Küpü Simülasyonu</h1>
+                    <p class="text-gray-500 text-sm mt-1">Lütfen giriş yönteminizi seçin.</p>
+                </div>
+
+                <!-- Tabs -->
+                <div class="flex border-b border-gray-200 mb-6">
+                    <button onclick="app.toggleLoginTab('player')" id="tab-player" class="flex-1 pb-3 border-b-2 border-blue-600 text-blue-600 font-bold transition">Grup Girişi</button>
+                    <button onclick="app.toggleLoginTab('mod')" id="tab-mod" class="flex-1 pb-3 border-b-2 border-transparent text-gray-400 font-medium hover:text-gray-600 transition">Moderatör</button>
+                </div>
+
+                <!-- Player Login Form -->
+                <div id="form-player" class="space-y-5 text-left">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Grup Seçimi</label>
+                        <div class="relative">
+                            <select id="inp-group-name" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none font-bold text-slate-700 bg-white appearance-none">
+                                <option value="Alpha">Grup Alpha</option>
+                                <option value="Beta">Grup Beta</option>
+                                <option value="Gamma">Grup Gamma</option>
+                                <option value="Delta">Grup Delta</option>
+                                <option value="Omega">Grup Omega</option>
+                            </select>
+                            <div class="absolute inset-y-0 right-0 flex items-center px-2 pointer-events-none">
+                                <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">1. Oyuncu Adı</label>
+                            <input type="text" id="inp-p1" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="İsim Girin">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 uppercase mb-1">2. Oyuncu Adı</label>
+                            <input type="text" id="inp-p2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="İsim Girin">
+                        </div>
+                    </div>
+                    
+                    <button onclick="app.loginGroup()" class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg mt-4 flex justify-center items-center">
+                        Simülasyonu Başlat <span class="ml-2">→</span>
+                    </button>
+                </div>
+
+                <!-- Moderator Login Form -->
+                <div id="form-mod" class="hidden space-y-5 text-left">
+                    <div class="bg-amber-50 p-4 rounded-lg text-xs text-amber-800 border border-amber-200">
+                        <strong>Bilgi:</strong> Moderatör paneli grupların oylamalarını anlık izler ve oyun akışını yönetir.
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Moderatör Adı</label>
+                        <input type="text" id="inp-mod-name" class="w-full border border-gray-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-red-500 outline-none" placeholder="Örn: Admin">
+                    </div>
+                    <button onclick="app.loginMod()" class="w-full bg-red-600 text-white py-4 rounded-xl font-bold hover:bg-red-700 transition shadow-lg mt-2">
+                        Yönetici Panelini Aç
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: DASHBOARD (Metrics) -->
+        <section id="view-dashboard" class="hidden fade-in space-y-8">
+            <div class="flex flex-col items-center mb-6">
+                <span class="bg-blue-100 text-blue-800 text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide mb-2">Genel Durum</span>
+                <h1 class="text-3xl font-extrabold text-slate-900">Şirket Performans Raporu</h1>
+                <p class="text-gray-500 mt-2">Tamamlanan: <span id="dash-week-current" class="font-bold text-blue-600">0</span> / 8 Hafta</p>
+                <p class="text-xs text-gray-400 mt-1 italic">Hedef: Tüm metriklerde 150 puanın üzerine çıkmak.</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Budget Card -->
+                <div class="bg-white p-6 rounded-2xl card-shadow border-t-4 border-blue-600 text-center relative">
+                    <h3 class="text-gray-400 text-sm font-bold uppercase mb-2 tracking-widest">Bütçe</h3>
+                    <div class="text-6xl font-extrabold text-blue-600" id="score-budget">100</div>
+                    <div class="absolute bottom-4 left-0 right-0 flex justify-center">
+                        <span class="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-1 rounded">HEDEF: 150</span>
+                    </div>
+                    <div class="h-6"></div>
+                </div>
+                
+                <!-- Quality Card -->
+                <div class="bg-white p-6 rounded-2xl card-shadow border-t-4 border-purple-600 text-center relative">
+                    <h3 class="text-gray-400 text-sm font-bold uppercase mb-2 tracking-widest">Kalite</h3>
+                    <div class="text-6xl font-extrabold text-purple-600" id="score-quality">100</div>
+                    <div class="absolute bottom-4 left-0 right-0 flex justify-center">
+                        <span class="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-1 rounded">HEDEF: 150</span>
+                    </div>
+                    <div class="h-6"></div>
+                </div>
+                
+                <!-- Motivation Card -->
+                <div class="bg-white p-6 rounded-2xl card-shadow border-t-4 border-orange-500 text-center relative">
+                    <h3 class="text-gray-400 text-sm font-bold uppercase mb-2 tracking-widest">Motivasyon</h3>
+                    <div class="text-6xl font-extrabold text-orange-500" id="score-motivation">100</div>
+                    <div class="absolute bottom-4 left-0 right-0 flex justify-center">
+                        <span class="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-1 rounded">HEDEF: 150</span>
+                    </div>
+                    <div class="h-6"></div>
+                </div>
+            </div>
+
+            <!-- Chart -->
+            <div class="bg-white p-6 rounded-2xl card-shadow border border-gray-100">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="font-bold text-slate-800">Trend Analizi</h3>
+                    <div class="flex space-x-2 text-xs">
+                        <span class="text-blue-600 font-bold">● Bütçe</span>
+                        <span class="text-purple-600 font-bold">● Kalite</span>
+                        <span class="text-orange-500 font-bold">● Motivasyon</span>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+
+            <div class="text-center">
+                <button onclick="app.navigate('game')" class="bg-slate-900 text-white px-10 py-4 rounded-xl font-bold hover:bg-slate-700 transition shadow-lg">
+                    Karar Ekranına Dön
+                </button>
+            </div>
+        </section>
+
+        <!-- VIEW: GAME (Voting) -->
+        <section id="view-game" class="hidden fade-in max-w-4xl mx-auto w-full">
+            <div class="mb-6 flex justify-between items-end border-b pb-4">
+                <div>
+                    <span class="text-sm font-bold text-blue-600 uppercase tracking-wider">Toplantı Gündemi</span>
+                    <h2 class="text-3xl font-extrabold text-slate-900" id="q-week-title">Hafta 1</h2>
+                </div>
+                <div class="text-right">
+                    <span class="text-xs font-bold text-gray-400 uppercase tracking-widest">Konu</span>
+                    <div class="text-lg font-medium text-slate-700">Yönetim Kararı</div>
+                </div>
+            </div>
+
+            <!-- Active Question Card -->
+            <div id="game-active-area" class="bg-white rounded-2xl card-shadow border border-gray-200 overflow-hidden mb-8">
+                <div class="p-6 md:p-10">
+                    <p class="text-xl md:text-2xl text-slate-700 leading-relaxed font-light mb-8" id="q-scenario">Senaryo yükleniyor...</p>
+                    
+                    <!-- Voting Steps UI -->
+                    <div class="flex space-x-2 md:space-x-4 mb-8 bg-gray-50 p-2 rounded-xl">
+                        <!-- Step 1 -->
+                        <div id="step-1-indicator" class="flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-active">
+                            <span class="text-[10px] font-bold uppercase tracking-widest opacity-70">1. Görüş</span>
+                            <span id="lbl-p1-name" class="font-bold text-sm md:text-base truncate w-full">...</span>
+                        </div>
+                        <!-- Step 2 -->
+                        <div id="step-2-indicator" class="flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-inactive">
+                            <span class="text-[10px] font-bold uppercase tracking-widest opacity-70">2. Görüş</span>
+                            <span id="lbl-p2-name" class="font-bold text-sm md:text-base truncate w-full">...</span>
+                        </div>
+                        <!-- Step 3 -->
+                        <div id="step-3-indicator" class="flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-inactive">
+                            <span class="text-[10px] font-bold uppercase tracking-widest opacity-70">Karar</span>
+                            <span class="font-bold text-sm md:text-base">GRUP OYU</span>
+                        </div>
+                    </div>
+
+                    <div id="voting-instruction" class="text-center mb-6 font-bold text-blue-600 animate-pulse text-lg">
+                        Lütfen seçiminizi yapın (1. Oyuncu)
+                    </div>
+
+                    <!-- Options Grid -->
+                    <div class="grid grid-cols-1 gap-3" id="options-container">
+                        <!-- Options injected by JS -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Success Box (Timer Paused) -->
+            <div id="decision-success" class="hidden text-center py-12 bg-white rounded-xl shadow-lg border border-gray-200">
+                <div class="inline-flex items-center justify-center w-20 h-20 bg-green-100 rounded-full mb-6 animate-bounce">
+                    <svg class="w-10 h-10 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+                </div>
+                <h3 class="text-2xl font-bold text-slate-800 mb-3">Grup Kararı Alındı</h3>
+                <p class="text-gray-500 mb-8 max-w-md mx-auto leading-relaxed">
+                    Tercihiniz sisteme işlendi ve şirket metrikleri güncellendi.<br>Süre şu an duraklatıldı.
+                </p>
+                <div class="flex flex-col md:flex-row justify-center space-y-3 md:space-y-0 md:space-x-4 px-6">
+                    <button onclick="app.navigate('dashboard')" class="px-8 py-4 border-2 border-gray-200 rounded-xl text-gray-700 hover:border-blue-500 hover:text-blue-600 font-bold transition w-full md:w-auto">
+                        📊 Analizi İncele
+                    </button>
+                    <button onclick="app.nextWeek()" class="px-8 py-4 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-bold shadow-lg transition w-full md:w-auto flex items-center justify-center">
+                        Sıradaki Gündem <span class="ml-2">→</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- VIEW: MODERATOR -->
+        <section id="view-moderator" class="hidden fade-in space-y-6 h-full">
+            <div class="flex justify-between items-center border-b pb-4 mb-4">
+                <h2 class="text-2xl font-bold text-slate-800">Moderatör Paneli</h2>
+                <div class="text-xs text-gray-400">Canlı Bağlantı Aktif</div>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[600px]">
+                <!-- Active Groups List -->
+                <div class="bg-white p-0 rounded-xl card-shadow border border-gray-200 lg:col-span-1 flex flex-col overflow-hidden">
+                    <div class="p-4 border-b bg-gray-50 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-700">Bağlı Gruplar</h3>
+                        <span id="user-count" class="bg-blue-600 text-white text-xs px-2 py-1 rounded-full font-bold">0</span>
+                    </div>
+                    <div id="mod-users-list" class="flex-1 overflow-y-auto scroller p-4 space-y-3">
+                        <p class="text-center text-gray-400 text-xs mt-10">Grupların bağlanması bekleniyor...</p>
+                    </div>
+                </div>
+
+                <!-- Live Feed -->
+                <div class="bg-white p-0 rounded-xl card-shadow border border-gray-200 lg:col-span-2 flex flex-col overflow-hidden">
+                    <div class="p-4 border-b bg-gray-50">
+                        <h3 class="font-bold text-gray-700">Canlı Oylama Akışı</h3>
+                    </div>
+                    <div id="mod-feed-list" class="flex-1 overflow-y-auto scroller p-0">
+                        <p class="text-center text-gray-400 text-xs mt-10">Henüz oylama yapılmadı.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="mt-auto border-t border-gray-200 py-6 bg-white text-center text-xs text-gray-400">
+        &copy; 2024 Bilgi Küpü AI Simülasyonu
+    </footer>
+
+    <!-- APP LOGIC -->
+    <script>
+        // --- 1. FIREBASE CONFIGURATION (BURASI DOLDURULACAK) ---
+        
+        // ÖNEMLİ: Aşağıdaki süslü parantez içine kendi Firebase proje ayarlarınızı yapıştırın.
+        // Firebase Console -> Project Settings -> General -> Your Apps -> SDK Setup and Configuration -> Config
+        const firebaseConfig = {
+            // BURAYA YAPIŞTIRIN: apiKey, authDomain, projectId, storageBucket, messagingSenderId, appId
+        };
+
+        // --- Init Firebase ---
+        let db, auth;
+        try {
+            if (firebase.apps.length === 0) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+            auth = firebase.auth();
+        } catch (e) {
+            console.error("Firebase Başlatma Hatası:", e);
+            // Hata mesajını console'da göster, ancak kullanıcıyı hemen ürkütme
+        }
+
+        // --- 2. GAME CONSTANTS & DATA ---
+        const TOTAL_MINUTES = 24; 
+        
+        const QUESTIONS = [
+            { week: 1, bias: "Doğrulama Yanlılığı", scenario: "Rakip firmanın ürününün ön testlerden geçtiği haberi geldi. Ancak elimizdeki eski raporlar tam tersini söylüyor. Ekip haberi görmezden gelmek istiyor.", 
+              options: [
+                {ref:'A', text:"Eski raporlara güvenip mevcut planı bozmadan devam edelim.", e:{b:0,q:-10,m:10}}, 
+                {ref:'B', text:"Haberi ciddiye alıp bütçeyi pazarlamaya kaydıralım.", e:{b:-15,q:0,m:20}}, 
+                {ref:'C', text:"Sadece ürün geliştirmeye odaklanıp haberi yok sayalım.", e:{b:10,q:15,m:-10}}, 
+                {ref:'D', text:"Haberi detaylı analiz edip stratejimizi revize edelim.", e:{b:15,q:10,m:10}}
+            ]},
+            { week: 2, bias: "Batık Maliyet", scenario: "Algoritma çok yavaş ama şu ana kadar çok para ve zaman harcandı. Mühendisler 'Emeklerimiz boşa gitmesin' diyor.", 
+              options: [
+                {ref:'A', text:"O kadar emek verdik, eski kodla devam edelim.", e:{b:-10,q:-10,m:5}}, 
+                {ref:'B', text:"Zararın neresinden dönülse kardır, sıfırdan yazalım.", e:{b:-20,q:25,m:10}}, 
+                {ref:'C', text:"Geçici yamalarla sistemi ayakta tutmaya çalışalım.", e:{b:10,q:-5,m:-5}}, 
+                {ref:'D', text:"Eski ve yeni sistemi hibrit kullanarak geçiş yapalım.", e:{b:10,q:15,m:10}}
+            ]},
+            { week: 3, bias: "Grup Düşüncesi", scenario: "Pazarlama ekibi çok riskli bir kampanya önerdi. Toplantıda kimse itiraz etmiyor çünkü herkes uyumlu görünmek istiyor.", 
+              options: [
+                {ref:'A', text:"Ekip hemfikirse uyumu bozmayıp onaylayalım.", e:{b:-30,q:0,m:20}}, 
+                {ref:'B', text:"Onaylayalım ama bütçeyi kısarak riski azaltalım.", e:{b:-10,q:5,m:5}}, 
+                {ref:'C', text:"Kampanyayı iptal edip sadece ürüne odaklanalım.", e:{b:20,q:10,m:-15}}, 
+                {ref:'D', text:"Riskleri tartışmaya açarak kararı tekrar değerlendirelim.", e:{b:10,q:10,m:15}}
+            ]},
+            { week: 4, bias: "Çapalama", scenario: "Tedarikçi sunucu için önce 100k dedi, sonra 80k'ya indi. Piyasa değeri 50k ama ekip indirime seviniyor.", 
+              options: [
+                {ref:'A', text:"İndirimli teklifi kaçırmayıp hemen kabul edelim.", e:{b:-25,q:5,m:5}}, 
+                {ref:'B', text:"Pazarlık yaparak fiyatı biraz daha düşürmeye çalışalım.", e:{b:-15,q:5,m:10}}, 
+                {ref:'C', text:"Bu tedarikçiyi bırakıp başka alternatifler arayalım.", e:{b:20,q:-5,m:-10}}, 
+                {ref:'D', text:"Piyasa araştırması yapıp gerçek değer üzerinden teklif verelim.", e:{b:25,q:5,m:10}}
+            ]},
+            { week: 5, bias: "Halo Etkisi", scenario: "Ünlü bir tasarımcı ekibe katılmak istiyor. Çizimleri harika ama teknik bilgisi sıfır.", 
+              options: [
+                {ref:'A', text:"Tasarımları harika, teknik liderliği de ona verelim.", e:{b:-10,q:5,m:-20}}, 
+                {ref:'B', text:"Teknik konulara karıştırmadan sadece danışman yapalım.", e:{b:-10,q:15,m:5}}, 
+                {ref:'C', text:"Teknik bilgisi yetersiz olduğu için reddedelim.", e:{b:10,q:5,m:10}}, 
+                {ref:'D', text:"Ona özel bir sanat ekibi kurup teknikten uzak tutalım.", e:{b:-5,q:20,m:15}}
+            ]},
+            { week: 6, bias: "Hayatta Kalma", scenario: "Sadece başarılı rakiplere bakıp 'Hepsi abonelik kullanıyor, biz de öyle yapalım' deniyor.", 
+              options: [
+                {ref:'A', text:"Başarılı rakipler gibi biz de abonelik modeline geçelim.", e:{b:5,q:0,m:-5}}, 
+                {ref:'B', text:"Kullanıcı kazanmak için Freemium modelini deneyelim.", e:{b:10,q:5,m:10}}, 
+                {ref:'C', text:"Gelir garantisi için tek seferlik satış yapalım.", e:{b:20,q:-5,m:0}}, 
+                {ref:'D', text:"Kendi verilerimize dayanarak özgün bir model geliştirelim.", e:{b:15,q:15,m:10}}
+            ]},
+            { week: 7, bias: "Bulunabilirlik", scenario: "Haberlerde bir güvenlik açığı skandalı çıktı. Ekip panikleyip tüm işi durdurarak sadece güvenliğe odaklanmak istiyor.", 
+              options: [
+                {ref:'A', text:"Her şeyi durdurup sadece güvenliğe odaklanalım.", e:{b:-10,q:5,m:-15}}, 
+                {ref:'B', text:"İşleri aksatmadan güvenlik bütçesini artıralım.", e:{b:-5,q:5,m:5}}, 
+                {ref:'C', text:"Risk düşük olduğu için planı bozmayalım.", e:{b:10,q:0,m:5}}, 
+                {ref:'D', text:"Sakin kalıp rasyonel bir risk analizi yapalım.", e:{b:10,q:10,m:10}}
+            ]},
+            { week: 8, bias: "Çerçeveleme", scenario: "Test sonucu: '%5 Hata Oranı' denince ekip korkuyor, '%95 Başarı' denince rahatlıyor.", 
+              options: [
+                {ref:'A', text:"Hata var diye lansmanı erteleyelim.", e:{b:-20,q:10,m:-10}}, 
+                {ref:'B', text:"Başarı oranı yüksek, hemen çıkış yapalım.", e:{b:20,q:-10,m:20}}, 
+                {ref:'C', text:"Risk almayıp sadece Beta sürümünü yayınlayalım.", e:{b:5,q:5,m:5}}, 
+                {ref:'D', text:"Kısa bir ek süre ile hataları giderip öyle çıkalım.", e:{b:-5,q:20,m:15}}
+            ]}
+        ];
+
+        // --- 3. APPLICATION LOGIC ---
+        const app = {
+            state: {
+                user: null, 
+                week: 0,
+                metrics: { b: 100, q: 100, m: 100 },
+                history: { labels: ['Başlangıç'], b: [100], q: [100], m: [100] },
+                timeRemaining: TOTAL_MINUTES * 60,
+                timerRunning: false,
+                timerInterval: null,
+                currentVoteStep: 0, 
+                tempVotes: { p1: null, p2: null }
+            },
+            chart: null,
+
+            toggleLoginTab: (type) => {
+                document.getElementById('form-player').classList.toggle('hidden', type !== 'player');
+                document.getElementById('form-mod').classList.toggle('hidden', type !== 'mod');
+                
+                const tPlayer = document.getElementById('tab-player');
+                const tMod = document.getElementById('tab-mod');
+                
+                if(type === 'player') {
+                    tPlayer.className = "flex-1 pb-3 border-b-2 border-blue-600 text-blue-600 font-bold transition";
+                    tMod.className = "flex-1 pb-3 border-b-2 border-transparent text-gray-400 font-medium hover:text-gray-600 transition";
+                } else {
+                    tMod.className = "flex-1 pb-3 border-b-2 border-red-600 text-red-600 font-bold transition";
+                    tPlayer.className = "flex-1 pb-3 border-b-2 border-transparent text-gray-400 font-medium hover:text-gray-600 transition";
+                }
+            },
+
+            navigate: (view) => {
+                ['login', 'dashboard', 'game', 'moderator'].forEach(v => {
+                    document.getElementById('view-' + v).classList.add('hidden');
+                });
+                document.getElementById('view-' + view).classList.remove('hidden');
+                
+                document.querySelectorAll('.nav-btn').forEach(b => {
+                    b.classList.remove('text-slate-900', 'font-bold');
+                    b.classList.add('text-gray-500');
+                });
+                const activeBtn = document.getElementById('nav-' + view);
+                if(activeBtn) {
+                    activeBtn.classList.add('text-slate-900', 'font-bold');
+                    activeBtn.classList.remove('text-gray-500');
+                }
+
+                const isGameView = view === 'game';
+                const isQuestionActive = !document.getElementById('game-active-area').classList.contains('hidden');
+                
+                if (isGameView && isQuestionActive) {
+                    app.startTimer();
+                } else {
+                    app.stopTimer();
+                }
+            },
+
+            loginGroup: async () => {
+                const groupName = document.getElementById('inp-group-name').value;
+                const p1 = document.getElementById('inp-p1').value.trim();
+                const p2 = document.getElementById('inp-p2').value.trim();
+                if(!p1 || !p2) return alert("Lütfen iki oyuncu ismini de giriniz.");
+                await app.authenticate(groupName, 'player', { p1, p2 });
+            },
+
+            loginMod: async () => {
+                const name = document.getElementById('inp-mod-name').value.trim();
+                if(!name) return alert("İsim giriniz.");
+                await app.authenticate(name, 'moderator', null);
+            },
+
+            authenticate: async (name, role, players) => {
+                try {
+                    let userCred = await auth.signInAnonymously();
+                    const uid = userCred.user.uid;
+                    const userProfile = { role, online: true, lastActive: new Date().toISOString() };
+
+                    if(role === 'player') {
+                        userProfile.groupName = name; 
+                        userProfile.p1Name = players.p1;
+                        userProfile.p2Name = players.p2;
+                    } else {
+                        userProfile.name = name;
+                    }
+
+                    // Save to Firestore (Assuming public collection for demo simplicity)
+                    const appIdSafe = (typeof appId !== 'undefined') ? appId : 'default-app';
+                    await db.collection('artifacts').doc(appIdSafe).collection('public').doc('data').collection('users').doc(uid).set(userProfile);
+                    
+                    app.state.user = { uid, ...userProfile };
+                    
+                    document.getElementById('view-login').classList.add('hidden');
+                    document.getElementById('navbar').classList.remove('hidden');
+                    
+                    if(role === 'player') {
+                        document.getElementById('user-badge').innerText = `Grup ${name}`;
+                        document.getElementById('timer-container').classList.remove('hidden');
+                        app.initPlayerGame();
+                        app.navigate('game');
+                    } else {
+                        document.getElementById('user-badge').innerText = `Moderatör: ${name}`;
+                        document.getElementById('user-badge').classList.add('text-red-600', 'bg-red-50', 'border-red-200');
+                        app.initModeratorView();
+                        app.navigate('moderator');
+                        document.getElementById('nav-dashboard').classList.add('hidden');
+                        document.getElementById('nav-game').classList.add('hidden');
+                    }
+                } catch (e) { 
+                    console.error("Auth", e); 
+                    alert("Giriş Hatası. Lütfen sayfayı yenileyin."); 
+                }
+            },
+
+            initPlayerGame: () => {
+                app.initChart();
+                app.renderQuestion();
+                app.updateTimerDisplay();
+            },
+
+            startTimer: () => {
+                if(app.state.timerRunning || (app.state.user && app.state.user.role === 'moderator')) return;
+                document.getElementById('timer-status').classList.add('hidden');
+                document.getElementById('global-timer').classList.remove('opacity-50');
+                app.state.timerRunning = true;
+                app.state.timerInterval = setInterval(() => {
+                    app.state.timeRemaining--;
+                    app.updateTimerDisplay();
+                    if(app.state.timeRemaining <= 0) {
+                        app.stopTimer();
+                        alert("Süre doldu! Son kararınız otomatik olarak sistem tarafından değerlendirilecek.");
+                    }
+                }, 1000);
+            },
+
+            stopTimer: () => {
+                clearInterval(app.state.timerInterval);
+                app.state.timerRunning = false;
+                document.getElementById('timer-status').classList.remove('hidden');
+                document.getElementById('global-timer').classList.add('opacity-50');
+            },
+
+            updateTimerDisplay: () => {
+                const m = Math.floor(app.state.timeRemaining / 60);
+                const s = app.state.timeRemaining % 60;
+                document.getElementById('global-timer').innerText = `${m}:${s.toString().padStart(2,'0')}`;
+                if(app.state.timeRemaining < 60) document.getElementById('global-timer').classList.add('timer-warning');
+            },
+
+            renderQuestion: () => {
+                const q = QUESTIONS[app.state.week];
+                if(!q) return;
+
+                document.getElementById('game-active-area').classList.remove('hidden');
+                document.getElementById('decision-success').classList.add('hidden');
+                document.getElementById('q-week-title').innerText = `Hafta ${q.week}`;
+                document.getElementById('q-scenario').innerText = q.scenario;
+                document.getElementById('lbl-p1-name').innerText = app.state.user.p1Name;
+                document.getElementById('lbl-p2-name').innerText = app.state.user.p2Name;
+
+                app.state.currentVoteStep = 0; 
+                app.state.tempVotes = { p1: null, p2: null };
+
+                app.updateVotingUI(q);
+                app.startTimer();
+            },
+
+            updateVotingUI: (q) => {
+                const step = app.state.currentVoteStep;
+                const ind1 = document.getElementById('step-1-indicator');
+                const ind2 = document.getElementById('step-2-indicator');
+                const ind3 = document.getElementById('step-3-indicator');
+                const msg = document.getElementById('voting-instruction');
+
+                [ind1, ind2, ind3].forEach(el => el.className = "flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-inactive");
+
+                if (step === 0) {
+                    ind1.className = "flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-active";
+                    msg.innerText = `${app.state.user.p1Name} (Bireysel Seçim)`;
+                } else if (step === 1) {
+                    ind1.className = "flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-done";
+                    ind2.className = "flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-active";
+                    msg.innerText = `${app.state.user.p2Name} (Bireysel Seçim)`;
+                } else {
+                    ind1.className = "flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-done";
+                    ind2.className = "flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-done";
+                    ind3.className = "flex-1 rounded-lg p-3 text-center transition flex flex-col items-center justify-center step-active bg-blue-600 text-white border-none";
+                    msg.innerText = `TARTIŞIN VE ORTAK KARAR VERİN (Puanı Etkiler)`;
+                }
+
+                const container = document.getElementById('options-container');
+                container.innerHTML = '';
+                
+                let opts = [...q.options];
+                opts.sort(() => Math.random() - 0.5);
+
+                opts.forEach((opt, i) => {
+                    const letter = String.fromCharCode(65+i);
+                    const btn = document.createElement('button');
+                    const isGroupStep = step === 2;
+                    const baseClass = "btn-option w-full text-left p-4 rounded-xl flex items-center shadow-sm border transition ";
+                    const styleClass = isGroupStep 
+                        ? "bg-blue-50 border-blue-200 hover:border-blue-500 hover:bg-blue-100" 
+                        : "bg-white border-gray-200 hover:border-gray-400 hover:bg-gray-50";
+
+                    btn.className = baseClass + styleClass;
+                    btn.onclick = () => app.handleVote(opt, q);
+                    btn.innerHTML = `
+                        <span class="${isGroupStep ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'} w-8 h-8 rounded-full flex items-center justify-center mr-4 font-bold flex-shrink-0 transition">${letter}</span>
+                        <span class="font-medium text-sm md:text-base text-slate-700">${opt.text}</span>
+                    `;
+                    container.appendChild(btn);
+                });
+            },
+
+            handleVote: async (opt, q) => {
+                if (app.state.currentVoteStep === 0) {
+                    app.state.tempVotes.p1 = { ref: opt.ref, text: opt.text };
+                    app.state.currentVoteStep = 1;
+                    app.updateVotingUI(q);
+                } else if (app.state.currentVoteStep === 1) {
+                    app.state.tempVotes.p2 = { ref: opt.ref, text: opt.text };
+                    app.state.currentVoteStep = 2;
+                    app.updateVotingUI(q);
+                } else {
+                    await app.submitFinalAnswer(opt, q);
+                }
+            },
+
+            submitFinalAnswer: async (groupOpt, q) => {
+                app.stopTimer();
+                app.state.metrics.b += groupOpt.e.b;
+                app.state.metrics.q += groupOpt.e.q;
+                app.state.metrics.m += groupOpt.e.m;
+                ['b','q','m'].forEach(k => { if(app.state.metrics[k]<0) app.state.metrics[k]=0; });
+
+                app.state.history.labels.push(`H${q.week}`);
+                app.state.history.b.push(app.state.metrics.b);
+                app.state.history.q.push(app.state.metrics.q);
+                app.state.history.m.push(app.state.metrics.m);
+                app.updateChart();
+                app.updateDashboardNums();
+
+                const appIdSafe = (typeof appId !== 'undefined') ? appId : 'default-app';
+                try {
+                    await db.collection('artifacts').doc(appIdSafe).collection('public').doc('data').collection('answers').add({
+                        groupName: app.state.user.groupName,
+                        week: q.week,
+                        timestamp: new Date().toISOString(),
+                        p1Name: app.state.user.p1Name,
+                        p1Choice: app.state.tempVotes.p1,
+                        p2Name: app.state.user.p2Name,
+                        p2Choice: app.state.tempVotes.p2,
+                        groupChoice: { ref: groupOpt.ref, text: groupOpt.text }
+                    });
+                } catch(e) { console.error("Save", e); }
+
+                document.getElementById('game-active-area').classList.add('hidden');
+                document.getElementById('decision-success').classList.remove('hidden');
+            },
+
+            nextWeek: () => {
+                app.state.week++;
+                if(app.state.week >= QUESTIONS.length) {
+                    alert("Simülasyon Tamamlandı! Harika iş çıkardınız.");
+                    app.navigate('dashboard');
+                } else {
+                    app.renderQuestion();
+                }
+            },
+
+            updateDashboardNums: () => {
+                document.getElementById('score-budget').innerText = app.state.metrics.b;
+                document.getElementById('score-quality').innerText = app.state.metrics.q;
+                document.getElementById('score-motivation').innerText = app.state.metrics.m;
+                document.getElementById('dash-week-current').innerText = app.state.week + 1;
+            },
+
+            initChart: () => {
+                const ctx = document.getElementById('trendChart').getContext('2d');
+                app.chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: app.state.history.labels,
+                        datasets: [
+                            { label: 'Bütçe', data: app.state.history.b, borderColor: '#2563eb', tension: 0.3, borderWidth: 2 },
+                            { label: 'Kalite', data: app.state.history.q, borderColor: '#9333ea', tension: 0.3, borderWidth: 2 },
+                            { label: 'Motivasyon', data: app.state.history.m, borderColor: '#f97316', tension: 0.3, borderWidth: 2 }
+                        ]
+                    },
+                    options: { 
+                        responsive: true, 
+                        maintainAspectRatio: false,
+                        plugins: { legend: { position: 'bottom' } },
+                        scales: { y: { beginAtZero: true } }
+                    }
+                });
+            },
+            
+            updateChart: () => {
+                if(app.chart) {
+                    app.chart.data.labels = app.state.history.labels;
+                    app.chart.data.datasets[0].data = app.state.history.b;
+                    app.chart.data.datasets[1].data = app.state.history.q;
+                    app.chart.data.datasets[2].data = app.state.history.m;
+                    app.chart.update();
+                }
+            },
+
+            initModeratorView: () => {
+                if(!auth.currentUser) return;
+                const appIdSafe = (typeof appId !== 'undefined') ? appId : 'default-app';
+
+                const usersRef = db.collection('artifacts').doc(appIdSafe).collection('public').doc('data').collection('users');
+                usersRef.onSnapshot((snapshot) => {
+                    const list = document.getElementById('mod-users-list');
+                    list.innerHTML = '';
+                    snapshot.docs.forEach(doc => {
+                        const d = doc.data();
+                        if(d.role === 'moderator') return;
+                        const item = document.createElement('div');
+                        item.className = "p-3 bg-white rounded-lg border border-gray-200 flex items-center justify-between";
+                        item.innerHTML = `<div><span class="font-bold text-slate-800">Grup ${d.groupName}</span><div class="text-[10px] text-gray-500 mt-1">${d.p1Name} & ${d.p2Name}</div></div><div class="h-2 w-2 bg-green-500 rounded-full shadow-sm animate-pulse"></div>`;
+                        list.appendChild(item);
+                    });
+                });
+
+                const answersRef = db.collection('artifacts').doc(appIdSafe).collection('public').doc('data').collection('answers').orderBy('timestamp', 'desc').limit(20);
+                answersRef.onSnapshot((snapshot) => {
+                    const list = document.getElementById('mod-feed-list');
+                    list.innerHTML = '';
+                    snapshot.docs.forEach(doc => {
+                        const d = doc.data();
+                        const item = document.createElement('div');
+                        item.className = "p-4 bg-white border-b border-gray-100 last:border-0 hover:bg-gray-50 transition";
+                        const groupColorClass = d.groupChoice.ref === 'D' ? 'text-green-600' : 'text-blue-600';
+                        item.innerHTML = `
+                            <div class="flex justify-between items-center mb-3"><span class="bg-slate-100 text-slate-600 text-xs font-bold px-2 py-1 rounded">GRUP ${d.groupName}</span><span class="text-xs text-gray-400">Hafta ${d.week}</span></div>
+                            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                                <div class="bg-gray-50 p-2 rounded border border-gray-100"><div class="font-bold text-gray-500 mb-1">${d.p1Name}</div><div class="text-slate-700 font-medium"><span class="font-bold text-gray-900">[${d.p1Choice.ref}]</span> ${d.p1Choice.text.substring(0,30)}...</div></div>
+                                <div class="bg-gray-50 p-2 rounded border border-gray-100"><div class="font-bold text-gray-500 mb-1">${d.p2Name}</div><div class="text-slate-700 font-medium"><span class="font-bold text-gray-900">[${d.p2Choice.ref}]</span> ${d.p2Choice.text.substring(0,30)}...</div></div>
+                                <div class="bg-blue-50 p-2 rounded border border-blue-100 ring-1 ring-blue-200"><div class="font-bold text-blue-500 mb-1">ORTAK KARAR</div><div class="font-bold ${groupColorClass}">[${d.groupChoice.ref}] ${d.groupChoice.text.substring(0,30)}...</div></div>
+                            </div>
+                        `;
+                        list.appendChild(item);
+                    });
+                });
+            }
+        };
+
+        window.app = app;
+    </script>
+</body>
+</html>
